@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Content Credentials (C2PA) Cheat Sheet for AI Images</title>
+<meta name="description" content="A quick reference for reading Content Credentials (C2PA) on AI-generated images: digital source types, actions, validation states, what strips them, and how SynthID differs.">
+<style>
+  :root{--ink:#1c2330;--mut:#5b6575;--line:#dfe3ea;--bg:#f7f8fa;--card:#ffffff;--acc:#0f62fe}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  main{max-width:760px;margin:0 auto;padding:48px 20px 64px}
+  h1{font-size:2rem;line-height:1.2;margin:0 0 8px}
+  .sub{color:var(--mut);margin:0 0 32px}
+  h2{font-size:1.25rem;margin:40px 0 12px;border-bottom:2px solid var(--line);padding-bottom:6px}
+  table{width:100%;border-collapse:collapse;background:var(--card);font-size:.92rem}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#eef1f5}
+  code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88em}
+  code{background:#eef1f5;padding:1px 5px;border-radius:4px}
+  pre{background:#20262e;color:#e8ecf1;padding:14px 16px;border-radius:8px;overflow-x:auto;line-height:1.5}
+  .tip{background:#fff8e6;border-left:4px solid #f1c21b;padding:10px 14px;margin:16px 0;font-size:.95rem}
+  a{color:var(--acc)}
+  footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:var(--mut);font-size:.9rem}
+  @media (max-width:600px){ .wide{overflow-x:auto} table{min-width:560px} }
+</style>
+</head>
+<body>
+<main>
+  <h1>Content Credentials (C2PA) Cheat Sheet</h1>
+  <p class="sub">One page on reading the provenance data inside an image file — the fields that say whether a picture came from a camera, an editor, or a generative model, and why most images you find online carry none of it.</p>
+
+  <h2>What a manifest is</h2>
+  <p>A C2PA manifest is a signed record embedded in the file (a JUMBF box in JPEG/PNG/WebP/HEIC). It lists <b>assertions</b> — what tool made the image, which actions were applied, thumbnails of ingredients — and a <b>claim signature</b> over all of it plus a hash of the pixel data. The <b>active manifest</b> is the most recent one; earlier manifests appear as ingredients.</p>
+
+  <h2>Digital source type (the field that answers "was this AI?")</h2>
+  <p>Found on the creating action, as an IPTC vocabulary URI ending in one of these values:</p>
+  <div class="wide"><table>
+    <tr><th>Value</th><th>Meaning</th><th>Generative AI?</th></tr>
+    <tr><td><code>trainedAlgorithmicMedia</code></td><td>Created by a model trained on sampled content</td><td>Yes</td></tr>
+    <tr><td><code>compositeWithTrainedAlgorithmicMedia</code></td><td>Real content combined with generated parts (e.g. generative fill)</td><td>Partly</td></tr>
+    <tr><td><code>algorithmicMedia</code></td><td>Made by an algorithm with no training data (procedural, fractal)</td><td>No — computer-generated, not AI</td></tr>
+    <tr><td><code>compositeSynthetic</code></td><td>Composite that includes synthetic elements</td><td>Unclear — read the actions</td></tr>
+    <tr><td><code>digitalCapture</code></td><td>Captured by a digital camera or scanner</td><td>No</td></tr>
+    <tr><td><code>screenCapture</code></td><td>A screenshot</td><td>Says nothing about the original</td></tr>
+    <tr><td><code>digitalArt</code></td><td>Created by a person with software</td><td>No</td></tr>
+  </table></div>
+  <div class="tip"><b>Common mistake:</b> treating <code>algorithmicMedia</code> as "AI-generated". In the IPTC definitions the word <i>trained</i> is what separates generative AI from ordinary computer graphics.</div>
+
+  <h2>Actions you'll see</h2>
+  <ul>
+    <li><code>c2pa.created</code> — the asset was made here (carries the digital source type).</li>
+    <li><code>c2pa.opened</code> — an existing asset was opened as the starting point.</li>
+    <li><code>c2pa.edited</code>, <code>c2pa.color_adjustments</code>, <code>c2pa.cropped</code>, <code>c2pa.resized</code> — edits after creation.</li>
+    <li><code>c2pa.placed</code> — another asset (an ingredient) was placed into this one.</li>
+    <li><code>c2pa.converted</code> — format change, e.g. PNG to JPEG.</li>
+  </ul>
+
+  <h2>Validation: integrity vs. trust</h2>
+  <p>Readers report two different things, and mixing them up causes most wrong conclusions:</p>
+  <div class="wide"><table>
+    <tr><th>Question</th><th>Codes to look for</th><th>If it fails</th></tr>
+    <tr><td>Did anything change after signing?</td><td><code>claimSignature.validated</code>, <code>assertion.dataHash.match</code></td><td>The file was altered — treat the manifest as a claim, not proof</td></tr>
+    <tr><td>Is the signer on the C2PA trust list?</td><td><code>signingCredential.trusted</code> / <code>signingCredential.untrusted</code></td><td>Content may be intact; only the certificate isn't recognised</td></tr>
+  </table></div>
+  <p>Overall states are <b>Invalid</b>, <b>Valid</b> and <b>Trusted</b>. A file can be "Invalid" overall purely because of the certificate check while its hashes and signature all pass — read the individual codes before calling an image tampered.</p>
+
+  <h2>What strips Content Credentials</h2>
+  <ul>
+    <li><b>Screenshots</b> — a new file with no manifest.</li>
+    <li><b>Most social and chat uploads</b> — platforms re-encode images and drop the metadata box.</li>
+    <li><b>Re-saving or converting</b> in tools that don't write C2PA — the old manifest is simply not copied.</li>
+    <li><b>Deliberate removal</b> — anyone can strip it; credentials prove origin when present, never absence when missing.</li>
+  </ul>
+  <div class="tip"><b>So:</b> "no credentials found" is the normal case for images from the web and tells you nothing on its own. That's where pattern-based detectors come in.</div>
+
+  <h2>Reading a manifest yourself</h2>
+<pre># Python (official binding)
+pip install c2pa-python
+python -c "import c2pa,sys; print(c2pa.Reader(sys.argv[1]).json())" photo.jpg
+
+# CLI
+c2patool photo.jpg</pre>
+  <p>In the browser, <code>@contentauth/c2pa-web</code> reads manifests client-side via WebAssembly, so the image never leaves the device.</p>
+
+  <h2>C2PA vs. SynthID vs. detectors</h2>
+  <div class="wide"><table>
+    <tr><th></th><th>C2PA</th><th>SynthID</th><th>Pattern detector</th></tr>
+    <tr><td>Where it lives</td><td>Signed box in the file</td><td>Invisible signal in the pixels</td><td>Nothing embedded</td></tr>
+    <tr><td>Who can read it</td><td>Anyone (open spec)</td><td>Google only</td><td>Whoever runs the model</td></tr>
+    <tr><td>Survives screenshots</td><td>No</td><td>Designed to</td><td>Works, lower accuracy</td></tr>
+    <tr><td>Output</td><td>A statement + signature</td><td>Present / not present</td><td>A probability</td></tr>
+  </table></div>
+
+  <div class="tip">
+    <b>Want it done in one step?</b> <a href="https://imageorai.com/" rel="noopener">Image or AI</a> reads Content Credentials and metadata in the browser, then runs a detection model only when the file stays silent — and says which evidence each verdict came from. For Google's watermark specifically, see <a href="https://imageorai.com/synthid-detector" rel="noopener">how to check for SynthID</a>.
+  </div>
+
+  <footer>
+    Maintained by Casey Marlin · reference only, not affiliated with the C2PA, Adobe, Google or OpenAI
+  </footer>
+</main>
+</body>
+</html>
